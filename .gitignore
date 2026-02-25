@@ -1,0 +1,26 @@
+# Virtual Environment
+venv/
+.env/
+__pycache__/
+
+# Python Cache
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Data Files
+data/raw/
+data/processed/
+*.csv
+
+# Model Files
+models/
+*.pkl
+*.joblib
+
+# OS Files
+.DS_Store
+Thumbs.db
