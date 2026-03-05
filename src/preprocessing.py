@@ -1,11 +1,5 @@
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-
-def load(file_name):
-    df=pd.read_csv(file_name)
-    # print(df['Label'].value_counts())
-    return df
 
 def remove_missing_values(df):
     
@@ -38,31 +32,49 @@ def remove_constant_columns(df):
     df.drop(columns=constant_col,inplace=True)
     return df
 
-def label_encoding(df):
-    le=LabelEncoder()
-    le.fit(df['Label'])
-    df['Label']= le.transform(df['Label'])
-    print(le.classes_)
-    return df,le
+def Binary_encoding(df):
+    df['Binary_Label'] = df['Label'].apply(lambda x: 0 if x == 'BENIGN' else 1)
+    return df
 
-def save_processed_file(df):
-    df.to_csv("data/processed/wednesday_cleaned.csv", index=False) # save processed file
+if __name__ == "__main__":
+
+    files=[
+        "data/raw/Wednesday-workingHours.pcap_ISCX.csv",
+        "data/raw/Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
+        "data/raw/Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX.csv",
+        "data/raw/Tuesday-WorkingHours.pcap_ISCX.csv",
+        "data/raw/Thursday-WorkingHours-Morning-WebAttacks.pcap_ISCX.csv",
+        "data/raw/Thursday-WorkingHours-Afternoon-Infilteration.pcap_ISCX.csv",
+        "data/raw/Friday-WorkingHours-Morning.pcap_ISCX.csv"
+    ]
+
+    dfs=[]
+
+    for file in files:
+        temp=pd.read_csv(file)
+        temp.columns = temp.columns.str.strip()
+        dfs.append(temp)
+
+    df=pd.concat(dfs,axis=0,ignore_index=True)
+
+    print("Before cleaning : ",df.shape)
+
+    df=remove_missing_values(df)  #Remove missing Values
+    df=remove_duplicates(df)  #Remove duplicates data samples(rows)
+    df=remove_constant_columns(df)
+    df=Binary_encoding(df)
+
+    print("After cleaning : ",df.shape)
+    print(df["Binary_Label"].value_counts(normalize=True))
+
+    for col in df.select_dtypes(include=['float64']).columns:
+        df[col] = df[col].astype('float32')
+
+    for col in df.select_dtypes(include=['int64']).columns:
+        df[col] = df[col].astype('int32')
+
+    df.to_csv("data/processed/processed_data.csv",index=False)
+
     
-
-file_name="data/raw/Wednesday-workingHours.pcap_ISCX.csv"
-df=load(file_name)
-df.columns=df.columns.str.strip()
-
-df=remove_missing_values(df)  #Remove missing Values
-df=remove_duplicates(df)  #Remove duplicates data samples(rows)
-df=remove_constant_columns(df)
-df,le=label_encoding(df)  #Encoding
-save_processed_file(df)
-
-X=df.drop("Label", axis=1)
-y=df['Label']
-
-print(X.shape)
-print(y.shape)
 
 
