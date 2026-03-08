@@ -11,14 +11,17 @@ def remove_missing_values(df):
 
     missing_percentage=(missing/len(df))*100 #find the missing percentage for each column
 
-    high_missing=missing_percentage[missing_percentage>50].index #if missing percentage is very high for a particular column, its better to remove that column
+    #if missing percentage is very high for a particular column, its better to remove that column
+    high_missing=missing_percentage[missing_percentage>50].index 
     df.drop(columns=high_missing,inplace=True)
 
-    moderate_missing=missing_percentage[(missing_percentage>=2) & (missing_percentage<=50)].index  #if neither high nor low so better to fill with some value
+    #if neither high nor low so better to fill with some value
+    moderate_missing=missing_percentage[(missing_percentage>=2) & (missing_percentage<=50)].index  
     for col in moderate_missing:
         df[col]=df[col].fillna(df[col].median())
     
-    low_missing=missing_percentage[missing_percentage<2].index #if it is very low for certain column so better to remove that data sample
+    #if it is very low for certain column so better to remove that data sample
+    low_missing=missing_percentage[missing_percentage<2].index 
     df.dropna(subset=low_missing,inplace=True)
 
     return df
@@ -61,12 +64,12 @@ if __name__ == "__main__":
 
     df=remove_missing_values(df)  #Remove missing Values
     df=remove_duplicates(df)  #Remove duplicates data samples(rows)
-    df=remove_constant_columns(df)
-    df=Binary_encoding(df)
+    df=remove_constant_columns(df) #Remove constant columns
+    df=Binary_encoding(df) #Binary Encoding for Normal/Attack
 
     print("After cleaning : ",df.shape)
-    print(df["Binary_Label"].value_counts(normalize=True))
 
+    #Memory Optimization
     for col in df.select_dtypes(include=['float64']).columns:
         df[col] = df[col].astype('float32')
 

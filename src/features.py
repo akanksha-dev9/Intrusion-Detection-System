@@ -10,48 +10,58 @@ df=pd.read_csv("data/processed/processed_data.csv")
 X=df.drop(["Label","Binary_Label"],axis=1)
 y=df["Binary_Label"]
 
+def log_transformation(X):   # Log Transforamtion
+    skew_values = X.skew()
+    highly_skewed=skew_values[skew_values>3]
 
-# Log Transforamtion
-skew_values = X.skew()
-highly_skewed=skew_values[skew_values>3]
+    X_log = X.copy()
 
-X_log = X.copy()
-
-for col in highly_skewed.index:
-    if(X_log[col]<0).any():
-        X_log[col]=X_log[col]-X_log[col].min()
-
-    X_log[col] = np.log1p(X_log[col])
+    for col in highly_skewed.index:
+        if(X_log[col]<0).any():
+            X_log[col]=X_log[col]-X_log[col].min()
     
-# Correlation based Feature Selection
-corr_matrix = X_log.corr().abs()
-upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)) 
-to_drop = [column for column in upper.columns if any(upper[column] > 0.9)]
+        X_log[col] = np.log1p(X_log[col])
 
-print("Highly correlated features:", len(to_drop))
+    return X_log
 
-X_selected = X_log.drop(columns=to_drop)
+def feature_selection(X_log):  # Correlation based Feature Selection
+    corr_matrix = X_log.corr().abs()
+    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool)) 
+    to_drop = [column for column in upper.columns if any(upper[column] > 0.9)]
 
-#Random Forest Feature Importance
-sample_size = 200000   # 1 lakh rows
-sample = X_selected.sample(sample_size, random_state=42)
-y_sample = y.loc[sample.index]
+    print("Highly correlated features:", len(to_drop))
 
-rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    X_selected = X_log.drop(columns=to_drop)
 
-rf.fit(sample,y_sample)
+    return X_selected
 
-importance = rf.feature_importances_
-feature_importance = pd.Series(importance, index=X_selected.columns).sort_values(ascending=False)
+def feature_importance(X_selected):   #Random Forest Feature Importance
+    sample_size = 200000   # 1 lakh rows
+    sample = X_selected.sample(sample_size, random_state=42)
+    y_sample = y.loc[sample.index]
 
-print(feature_importance.head(30))
+    rf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
 
-top_features=feature_importance.head(30).index
-X_final=X_selected[top_features]    #final selected features
+    rf.fit(sample,y_sample)
 
-print("X_final shape:", X_final.shape)
+    importance = rf.feature_importances_
+    feature_importance = pd.Series(importance, index=X_selected.columns).sort_values(ascending=False)
 
-final_df=X_final.copy()
-final_df["Binary_Label"]=y
+    top_features=feature_importance.head(30).index
+    X_final=X_selected[top_features]    #final selected features
 
-final_df.to_csv("data/processed/final_features.csv",index=False)
+    return X_final
+
+if __name__ == "__main__":
+
+     X_log=log_transformation(X)
+     X_selected=feature_selection(X_log)
+     X_final=feature_importance(X_selected)
+
+     print("X_final shape: ", X_final.shape)
+     print("selected features: ",list(X_final.columns))
+
+     final_df=X_final.copy()
+     final_df["Binary_Label"]=y
+
+     final_df.to_csv("data/processed/final_features.csv",index=False)
