@@ -5,12 +5,8 @@ from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
 from sklearn.preprocessing import StandardScaler
 
-df=pd.read_csv("data/processed/processed_data.csv")
-
-X=df.drop(["Label","Binary_Label"],axis=1)
-y=df["Binary_Label"]
-
 def log_transformation(X):   # Log Transforamtion
+    print("Applying log transformation on highly skewed features...")
     skew_values = X.skew()
     highly_skewed=skew_values[skew_values>3]
 
@@ -36,6 +32,7 @@ def feature_selection(X_log):  # Correlation based Feature Selection
     return X_selected
 
 def feature_importance(X_selected):   #Random Forest Feature Importance
+    print("Applying feature importance and taking important 15 features...")
     sample_size = 200000   # 1 lakh rows
     sample = X_selected.sample(sample_size, random_state=42)
     y_sample = y.loc[sample.index]
@@ -47,21 +44,27 @@ def feature_importance(X_selected):   #Random Forest Feature Importance
     importance = rf.feature_importances_
     feature_importance = pd.Series(importance, index=X_selected.columns).sort_values(ascending=False)
 
-    top_features=feature_importance.head(30).index
+    top_features=feature_importance.head(15).index
     X_final=X_selected[top_features]    #final selected features
-
+    
     return X_final
 
 if __name__ == "__main__":
+     
+    df=pd.read_csv("data/processed/processed_data.csv")
 
-     X_log=log_transformation(X)
-     X_selected=feature_selection(X_log)
-     X_final=feature_importance(X_selected)
+    X=df.drop(["Label","Binary_Label"],axis=1)
+    y=df["Binary_Label"]
+     
+    print("X shape before feature engineering: ",X.shape)
+    X_log=log_transformation(X)
+    X_selected=feature_selection(X_log)
+    X_final=feature_importance(X_selected)
 
-     print("X_final shape: ", X_final.shape)
-     print("selected features: ",list(X_final.columns))
+    print("X_final shape: ", X_final.shape)
+    print("selected features: ",list(X_final.columns))
 
-     final_df=X_final.copy()
-     final_df["Binary_Label"]=y
+    final_df=X_final.copy()
+    final_df["Binary_Label"]=y
 
-     final_df.to_csv("data/processed/final_features.csv",index=False)
+    final_df.to_csv("data/processed/final_features.csv",index=False)

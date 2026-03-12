@@ -2,12 +2,13 @@ import numpy as np
 import pandas as pd
 
 def remove_missing_values(df):
+
+    print("Handling missing values...")
     
     df.replace([np.inf,-np.inf], np.nan,inplace=True) #Replace infinite values with NaN
 
     missing=df.isnull().sum() #Find the missing values per column
-    missing=missing[missing>0]
-    missing=missing.sort_values(ascending=False)
+    missing=missing[missing>0].sort_values(ascending=False)
 
     missing_percentage=(missing/len(df))*100 #find the missing percentage for each column
 
@@ -27,15 +28,18 @@ def remove_missing_values(df):
     return df
 
 def remove_duplicates(df):
+    print("Removing duplicates...")
     df.drop_duplicates(inplace=True)
     return df
 
 def remove_constant_columns(df):
+    print("Removing constant columns...")
     constant_col=df.columns[df.nunique()==1]
     df.drop(columns=constant_col,inplace=True)
     return df
 
 def Binary_encoding(df):
+    print("Binary Encoding for Normal/Attack as 0/1...")
     df['Binary_Label'] = df['Label'].apply(lambda x: 0 if x == 'BENIGN' else 1)
     return df
 
