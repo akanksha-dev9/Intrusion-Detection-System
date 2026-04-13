@@ -21,8 +21,6 @@ models/
 *.pkl
 *.joblib
 
-notebooks/
-
 # OS Files
 .DS_Store
 Thumbs.db
