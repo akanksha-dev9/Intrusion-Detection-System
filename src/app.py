@@ -142,29 +142,65 @@ elif option == "Upload CSV":
 # REAL-TIME SIMULATION
 # =========================
 elif option == "Real-Time Simulation":
-    st.subheader("⚡ Real-Time Simulation")
-    st.caption("Generates random flow data to simulate live traffic predictions.")
+    st.subheader("⚡ Real-Time Live IDS Dashboard")
+    st.caption("Shows real-time predictions from live network traffic")
 
-    if st.button("Simulate 10 Live Flows"):
-        live_data = pd.DataFrame(
-            np.random.rand(10, len(selected_features)) * 1000,
-            columns=selected_features
-        )
+    import os
 
-        verdicts, probas, scores = predict(live_data)
+    placeholder = st.empty()
 
-        live_data["Verdict"]   = verdicts
-        live_data["CLF_Prob"]  = probas.round(3)
-        live_data["ISO_Score"] = scores.round(3)
+    while True:
+        if os.path.exists("live_data.csv"):
+            df = pd.read_csv("live_data.csv")
 
-        st.dataframe(live_data)
+            if not df.empty:
+                df = df.tail(50)  # last 50 flows only
 
-        counts = pd.Series(verdicts).value_counts()
+                with placeholder.container():
 
-        colors = ["#ef4444" if "Known" in l else "#f59e0b" if "Unknown" in l else "#22c55e"
-                  for l in counts.index]
-    
-        plt.xticks(rotation=15)
- 
+                    st.markdown("### 📊 Live Traffic Data")
+                    st.dataframe(df)
 
-        st.line_chart(live_data[selected_features[:6]])
+                    latest = df.iloc[-1]
+
+                    if "ATTACK" in latest["Label"]:
+                        st.error(f"🚨 ALERT: {latest['Label']}")
+                    elif "UNKNOWN" in latest["Label"]:
+                        st.warning(f"⚠️ Suspicious Activity Detected")
+                    else:
+                        st.success("✅ System Normal")
+
+                    # ------------------------
+                    # Attack Count Graph
+                    # ------------------------
+                    # st.markdown("### 📈 Attack Trend")
+
+                    # counts = df["Label"].value_counts()
+
+                    # fig, ax = plt.subplots()
+
+                    # colors = [
+                    #     "#ef4444" if "KNOWN" in l else
+                    #     "#f59e0b" if "UNKNOWN" in l else
+                    #     "#22c55e"
+                    #     for l in counts.index
+                    # ]
+
+                    # counts.plot(kind="bar", ax=ax, color=colors)
+
+                    # ax.set_title("Live Attack Distribution")
+                    # ax.set_ylabel("Count")
+
+                    # st.pyplot(fig)
+
+                    # ------------------------
+                    # Confidence Graph (changing)
+                    # ------------------------
+                    st.markdown("### 📉 Confidence Over Time")
+
+                    st.line_chart(df[["CLF_Prob", "ISO_Score"]])
+
+        else:
+            st.warning("Waiting for live data... Start IDS script first!")
+
+        time.sleep(2)
