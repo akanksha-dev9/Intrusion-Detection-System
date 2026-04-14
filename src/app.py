@@ -1,113 +1,170 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
+import matplotlib.pyplot as plt
+import time
 
-# Load models
+# =========================
+# LOAD MODELS
+# =========================
 clf_model = joblib.load("models/rf_model.pkl")
 iso_model = joblib.load("models/iso_model.pkl")
 scaler = joblib.load("models/scaler.pkl")
-selected_features = joblib.load("models/features.pkl")
-attack_sample = joblib.load("models/sample_attack.pkl")
-normal_sample = joblib.load("models/sample_normal.pkl")
+selected_features = joblib.load("models/features.pkl")  # loads your actual 12 features
 
-st.set_page_config(page_title="NIDS", layout="centered")
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(page_title="Intrusion Detection System", layout="wide")
+st.title("🚨 Intrusion Detection System Dashboard")
 
-st.title("🔐 Hybrid Intrusion Detection System")
-st.write("Detects known and unknown network attacks")
+# =========================
+# SIDEBAR
+# =========================
+option = st.sidebar.selectbox(
+    "Choose Input Method",
+    ["Manual Input", "Upload CSV", "Real-Time Simulation"]
+)
 
-if "use_sample" not in st.session_state:
-    st.session_state.use_sample = None
+# =========================
+# PREDICT FUNCTION (HYBRID)
+# =========================
+def predict(data):
+    df = data.copy()
 
-# SAMPLE BUTTONS
-st.subheader("⚡ Quick Test")
+    # ensure all 12 features present
+    for col in selected_features:
+        if col not in df.columns:
+            df[col] = 0
 
-col1, col2 = st.columns(2)
+    df = df[selected_features]
+    df.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df.fillna(0, inplace=True)
+    df = df.clip(-1e9, 1e9)
 
-with col1:
-    if st.button("🧪 Test Known Attack"):
-        st.session_state.use_sample = attack_sample
+    scaled = scaler.transform(df)
 
-with col2:
-    if st.button("🧪 Test Normal Traffic"):
-        st.session_state.use_sample = normal_sample
+    clf_probas = clf_model.predict_proba(scaled)[:, 1]
+    iso_scores = iso_model.decision_function(scaled)
 
-# Sidebar input
-st.sidebar.header("Enter Feature Values")
+    verdicts = []
+    for clf_p, iso_s in zip(clf_probas, iso_scores):
+        if clf_p > 0.5:
+            verdicts.append("🚨 Known Attack")
+        elif iso_s < -0.3:
+            verdicts.append("⚠️ Unknown Attack")
+        else:
+            verdicts.append("✅ Normal")
 
-input_data = {}
+    return verdicts, clf_probas, iso_scores
 
-for feature in selected_features:
-    input_data[feature] = st.sidebar.number_input(feature, value=0.0)
+# =========================
+# MANUAL INPUT
+# =========================
+if option == "Manual Input":
+    st.subheader("✍️ Enter Features Manually")
 
-# Convert to DataFrame
-input_df = pd.DataFrame([input_data])
+    input_data = {}
+    cols = st.columns(3)
 
-# Override with sample if selected
-if st.session_state.use_sample is not None:
-    st.info("Using preloaded sample for quick demo 🚀")
-    input_df = pd.DataFrame([st.session_state.use_sample])
+    for i, feature in enumerate(selected_features):
+        with cols[i % 3]:
+            input_data[feature] = st.number_input(feature, value=0.0)
 
-input_df = input_df[selected_features]
+    if st.button("Predict"):
+        df = pd.DataFrame([input_data])
+        verdicts, probas, scores = predict(df)
 
-# Apply scaling
-input_scaled = scaler.transform(input_df)
+        v = verdicts[0]
+        if "Known" in v:
+            st.error(f"Result: {v}")
+        elif "Unknown" in v:
+            st.warning(f"Result: {v}")
+        else:
+            st.success(f"Result: {v}")
 
-# Prediction
-if st.button("Predict") or st.session_state.use_sample is not None:
+        c1, c2 = st.columns(2)
+        c1.metric("Classifier Confidence", f"{probas[0]:.1%}")
+        c2.metric("Anomaly Score", f"{scores[0]:.3f}")
 
-    # Predictions
-    clf_pred = clf_model.predict(input_scaled)[0]
-    iso_pred = iso_model.predict(input_scaled)[0]
+# =========================
+# CSV UPLOAD
+# =========================
+elif option == "Upload CSV":
+    st.subheader("📂 Upload CSV File")
 
-    # Probabilities
-    clf_proba = clf_model.predict_proba(input_scaled)[0][1]
-    iso_score = iso_model.decision_function(input_scaled)[0]
+    file = st.file_uploader("Upload your CSV", type=["csv"])
 
-    # FINAL RESULT
-    st.subheader("🔐 Final Verdict")
+    if file is not None:
+        df = pd.read_csv(file)
+        df.columns = df.columns.str.strip()
 
-    if clf_proba > 0.6:
-        st.error("🚨 Known Attack Detected")
-    elif iso_pred == -1:
-        st.warning("⚠️ Potential Unknown Attack")
-    else:
-        st.success("✅ Normal Traffic")
+        st.write("Preview:")
+        st.dataframe(df.head())
 
-    # CONFIDENCE BAR
-    st.subheader("📊 Detection Confidence")
+        if st.button("Run Prediction"):
+            verdicts, probas, scores = predict(df)
 
-    st.progress(int(clf_proba * 100))
+            df["Verdict"]   = verdicts
+            df["CLF_Prob"]  = probas.round(3)
+            df["ISO_Score"] = scores.round(3)
 
-    if clf_proba > 0.8:
-        st.success(f"High confidence attack ({clf_proba:.1%})")
-    elif clf_proba > 0.5:
-        st.warning(f"Moderate confidence ({clf_proba:.1%})")
-    else:
-        st.info(f"Low confidence ({clf_proba:.1%})")
+            st.success("Prediction complete!")
+            st.dataframe(df[selected_features[:4] + ["Verdict", "CLF_Prob", "ISO_Score"]].head(50))
 
-    # ANOMALY ANALYSIS
-    st.subheader("🧠 Anomaly Analysis")
+            csv_out = df.to_csv(index=False).encode("utf-8")
+            st.download_button("⬇️ Download Results", csv_out, "results.csv", "text/csv")
 
-    if iso_score < -0.2:
-        st.error("Highly unusual traffic detected 🚨")
-    elif iso_score < 0:
-        st.warning("Slightly unusual behavior ⚠️")
-    else:
-        st.success("Normal behavior ✅")
+            # --- charts ---
+            st.subheader("📈 Visualization")
 
-    # KEY FEATURES
-    st.subheader("📌 Key Indicators Used")
+            counts = pd.Series(verdicts).value_counts()
+            fig, ax = plt.subplots()
+            colors = ["#ef4444" if "Known" in l else "#f59e0b" if "Unknown" in l else "#22c55e"
+                      for l in counts.index]
+            counts.plot(kind="bar", ax=ax, color=colors)
+            ax.set_title("Verdict Distribution")
+            ax.set_ylabel("Count")
+            plt.xticks(rotation=15)
+            st.pyplot(fig)
 
-    st.write(selected_features[:5])
+            fig2, ax2 = plt.subplots()
+            ax2.hist(probas, bins=30, color="#7b2fff", alpha=0.8)
+            ax2.axvline(0.5, color="red", linestyle="--", label="Threshold (0.5)")
+            ax2.set_title("Classifier Confidence Distribution")
+            ax2.set_xlabel("Attack Probability")
+            ax2.set_ylabel("Count")
+            ax2.legend()
+            st.pyplot(fig2)
 
-    # 🧾 EXPLANATION
-    st.markdown("""
-    ### 🧾 What does this mean?
+# =========================
+# REAL-TIME SIMULATION
+# =========================
+elif option == "Real-Time Simulation":
+    st.subheader("⚡ Real-Time Simulation")
+    st.caption("Generates random flow data to simulate live traffic predictions.")
 
-    - 🚨 **Known Attack** → Matches known malicious patterns  
-    - ⚠️ **Unknown Attack** → Unusual behavior detected  
-    - ✅ **Normal Traffic** → No threat detected  
-    """)
+    if st.button("Simulate 10 Live Flows"):
+        live_data = pd.DataFrame(
+            np.random.rand(10, len(selected_features)) * 1000,
+            columns=selected_features
+        )
 
-if st.button("🔄 Reset"):
-    st.session_state.use_sample = None
+        verdicts, probas, scores = predict(live_data)
+
+        live_data["Verdict"]   = verdicts
+        live_data["CLF_Prob"]  = probas.round(3)
+        live_data["ISO_Score"] = scores.round(3)
+
+        st.dataframe(live_data)
+
+        counts = pd.Series(verdicts).value_counts()
+
+        colors = ["#ef4444" if "Known" in l else "#f59e0b" if "Unknown" in l else "#22c55e"
+                  for l in counts.index]
+    
+        plt.xticks(rotation=15)
+ 
+
+        st.line_chart(live_data[selected_features[:6]])
