@@ -5,35 +5,26 @@ import joblib
 import matplotlib.pyplot as plt
 import time
 
-# =========================
-# LOAD MODELS
-# =========================
-clf_model = joblib.load("models/rf_model.pkl")
+# Load models
+clf_model = joblib.load("models/xgb_model.pkl")  
 iso_model = joblib.load("models/iso_model.pkl")
-scaler = joblib.load("models/scaler.pkl")
-selected_features = joblib.load("models/features.pkl")  # loads your actual 12 features
+selected_features = joblib.load("models/features.pkl")
 
-# =========================
-# PAGE CONFIG
-# =========================
+
+# Page config
 st.set_page_config(page_title="Intrusion Detection System", layout="wide")
 st.title("🚨 Intrusion Detection System Dashboard")
 
-# =========================
-# SIDEBAR
-# =========================
+# sidebar
 option = st.sidebar.selectbox(
     "Choose Input Method",
     ["Manual Input", "Upload CSV", "Real-Time Simulation"]
 )
 
-# =========================
-# PREDICT FUNCTION (HYBRID)
-# =========================
+# Prediction function
 def predict(data):
     df = data.copy()
 
-    # ensure all 12 features present
     for col in selected_features:
         if col not in df.columns:
             df[col] = 0
@@ -43,25 +34,27 @@ def predict(data):
     df.fillna(0, inplace=True)
     df = df.clip(-1e9, 1e9)
 
-    scaled = scaler.transform(df)
-
-    clf_probas = clf_model.predict_proba(scaled)[:, 1]
-    iso_scores = iso_model.decision_function(scaled)
+    clf_probas = clf_model.predict_proba(df)[:, 1]
+    iso_scores = iso_model.decision_function(df)
 
     verdicts = []
     for clf_p, iso_s in zip(clf_probas, iso_scores):
-        if clf_p > 0.5:
+
+        if clf_p > 0.85:
             verdicts.append("🚨 Known Attack")
-        elif iso_s < -0.3:
+
+        elif clf_p > 0.5 and iso_s < -0.4:
             verdicts.append("⚠️ Unknown Attack")
+
+        elif iso_s < -0.5:
+            verdicts.append("⚠️ Suspicious")
+
         else:
             verdicts.append("✅ Normal")
 
     return verdicts, clf_probas, iso_scores
 
-# =========================
-# MANUAL INPUT
-# =========================
+# Manual input
 if option == "Manual Input":
     st.subheader("✍️ Enter Features Manually")
 
@@ -88,9 +81,7 @@ if option == "Manual Input":
         c1.metric("Classifier Confidence", f"{probas[0]:.1%}")
         c2.metric("Anomaly Score", f"{scores[0]:.3f}")
 
-# =========================
-# CSV UPLOAD
-# =========================
+# CSV upload
 elif option == "Upload CSV":
     st.subheader("📂 Upload CSV File")
 
@@ -116,7 +107,7 @@ elif option == "Upload CSV":
             csv_out = df.to_csv(index=False).encode("utf-8")
             st.download_button("⬇️ Download Results", csv_out, "results.csv", "text/csv")
 
-            # --- charts ---
+            # charts
             st.subheader("📈 Visualization")
 
             counts = pd.Series(verdicts).value_counts()
@@ -131,22 +122,19 @@ elif option == "Upload CSV":
 
             fig2, ax2 = plt.subplots()
             ax2.hist(probas, bins=30, color="#7b2fff", alpha=0.8)
-            ax2.axvline(0.5, color="red", linestyle="--", label="Threshold (0.5)")
+            ax2.axvline(0.85, color="red", linestyle="--", label="Threshold (0.85)")  # ✅ updated
             ax2.set_title("Classifier Confidence Distribution")
             ax2.set_xlabel("Attack Probability")
             ax2.set_ylabel("Count")
             ax2.legend()
             st.pyplot(fig2)
 
-# =========================
-# REAL-TIME SIMULATION
-# =========================
+# real time simulation
 elif option == "Real-Time Simulation":
     st.subheader("⚡ Real-Time Live IDS Dashboard")
     st.caption("Shows real-time predictions from live network traffic")
 
     import os
-
     placeholder = st.empty()
 
     while True:
@@ -154,7 +142,7 @@ elif option == "Real-Time Simulation":
             df = pd.read_csv("live_data.csv")
 
             if not df.empty:
-                df = df.tail(50)  # last 50 flows only
+                df = df.tail(5)
 
                 with placeholder.container():
 
@@ -170,34 +158,7 @@ elif option == "Real-Time Simulation":
                     else:
                         st.success("✅ System Normal")
 
-                    # ------------------------
-                    # Attack Count Graph
-                    # ------------------------
-                    # st.markdown("### 📈 Attack Trend")
-
-                    # counts = df["Label"].value_counts()
-
-                    # fig, ax = plt.subplots()
-
-                    # colors = [
-                    #     "#ef4444" if "KNOWN" in l else
-                    #     "#f59e0b" if "UNKNOWN" in l else
-                    #     "#22c55e"
-                    #     for l in counts.index
-                    # ]
-
-                    # counts.plot(kind="bar", ax=ax, color=colors)
-
-                    # ax.set_title("Live Attack Distribution")
-                    # ax.set_ylabel("Count")
-
-                    # st.pyplot(fig)
-
-                    # ------------------------
-                    # Confidence Graph (changing)
-                    # ------------------------
                     st.markdown("### 📉 Confidence Over Time")
-
                     st.line_chart(df[["CLF_Prob", "ISO_Score"]])
 
         else:
